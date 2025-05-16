@@ -1,4 +1,5 @@
-import React, { type FormEvent } from "react";
+import React, { useEffect, useRef, type FormEvent } from "react";
+import { io, type Socket } from "socket.io-client";
 
 export default function App() {
   return (
@@ -16,10 +17,40 @@ const languageOptions: Record<langs, string> = {
   es: "Spanish",
 };
 
+const SOCKET_SERVER_URL = "http://localhost:4000";
+
 function MainApp() {
   const [username, setUsername] = React.useState("");
   const [userLanguage, setUserLanguage] = React.useState<langs>("null");
   const [partnerLanguage, setPartnerLanguage] = React.useState<langs>("null");
+
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    if (socketRef) {
+      socketRef.current = io(SOCKET_SERVER_URL);
+      console.log("hello");
+      socketRef.current.on("socketAndSee", (data) => console.log(data));
+      socketRef.current.emit("thanks", "thanks! so much lol!");
+    }
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, []);
+
+  const handleSubmitForm = (formData: FormData) => {
+    const retrievedData: BasicFormData = {
+      username: formData.get("username") as string,
+      userLanguage: formData.get("userLanguage") as langs,
+      partnerLanguage: formData.get("partnerLanguage") as langs,
+    };
+
+    socketRef.current?.emit("newRoom", {
+      roomData: retrievedData,
+      socketId: socketRef.current.id,
+    });
+  };
 
   return (
     <div className="min-w-[400px] p-2 bg-white max-w-[400px] min-h-[800px] max-h-[800px]">
@@ -33,6 +64,7 @@ function MainApp() {
         setUserLang={setUserLanguage}
         partnerLang={partnerLanguage}
         setPartnerLang={setPartnerLanguage}
+        onSubmitForm={handleSubmitForm}
       />
     </div>
   );
@@ -45,6 +77,13 @@ type BasicFormProps = {
   setUserLang: React.Dispatch<React.SetStateAction<langs>>;
   partnerLang: langs;
   setPartnerLang: React.Dispatch<React.SetStateAction<langs>>;
+  onSubmitForm: (formData: FormData) => void;
+};
+
+type BasicFormData = {
+  username: string;
+  userLanguage: langs;
+  partnerLanguage: langs;
 };
 
 function BasicForm({
@@ -54,6 +93,7 @@ function BasicForm({
   setUserLang,
   partnerLang,
   setPartnerLang,
+  onSubmitForm,
 }: BasicFormProps) {
   let ready: boolean;
 
@@ -63,9 +103,10 @@ function BasicForm({
     ready = true;
   }
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log(username, userLang);
+    const formData = new FormData(e.currentTarget);
+    onSubmitForm(formData);
   };
 
   return (
@@ -77,16 +118,17 @@ function BasicForm({
           <input
             type="text"
             id="username"
+            name="username"
             className="border border-black"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
         </div>
         <div className="flex flex-col gap-2 mb-2">
-          <label htmlFor="lang">select ur language</label>
+          <label htmlFor="userLanguage">select ur language</label>
           <select
-            name="lang"
-            id="lang"
+            name="userLanguage"
+            id="userLanguage"
             className="border border-black"
             value={userLang}
             onChange={(e) => setUserLang(e.target.value as langs)}
@@ -99,10 +141,10 @@ function BasicForm({
           </select>
         </div>
         <div className="flex flex-col gap-2 mb-4">
-          <label htmlFor="lang">partner language</label>
+          <label htmlFor="partnerLanguage">partner language</label>
           <select
-            name="lang"
-            id="lang"
+            name="partnerLanguage"
+            id="partnerLanguage"
             className="border border-black"
             value={partnerLang}
             onChange={(e) => setPartnerLang(e.target.value as langs)}
