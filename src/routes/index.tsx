@@ -1,17 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { QRCodeSVG } from "qrcode.react";
+import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { io, Socket } from "socket.io-client";
+
+interface RoomMetaData {
+  username: string;
+  userLanguage: string;
+  partnerLanguage: string;
+}
+
+interface Room {
+  owner: string;
+  partner: string | null;
+  metadata: RoomMetaData;
+}
+
+interface newRoomData {
+  roomName: string;
+  roomMetaData: RoomMetaData;
+  socketId: string;
+}
 
 export const Route = createFileRoute("/")({
   component: Index,
 });
 
 function Index() {
-  return (
-    <main className="place-content-center place-items-center bg-stone-300 h-[100vh]">
-      <MainApp />
-    </main>
-  );
+  return <MainApp />;
 }
 
 type langs = "null" | "en" | "es";
@@ -22,21 +37,42 @@ const languageOptions: Record<langs, string> = {
   es: "Spanish",
 };
 
-const SOCKET_SERVER_URL = "http://localhost:4000";
+// const SOCKET_SERVER_URL = "http://localhost:4000";
+const SOCKET_SERVER_URL = `${window.location.protocol}//${window.location.hostname}:4000`;
+const VITE_DEV_SERVER = `${window.location.protocol}//${window.location.hostname}:5173`;
 
 function MainApp() {
   const [username, setUsername] = useState("");
   const [userLanguage, setUserLanguage] = useState<langs>("null");
   const [partnerLanguage, setPartnerLanguage] = useState<langs>("null");
-
+  const [showQRCodeModal, setShowQRCodeModal] = useState<boolean>(false);
+  const [newRoomName, setNewRoomName] = useState<string | null>(null);
+  const [partnerJoining, setPartnerJoining] = useState<boolean>(false);
   const socketRef = useRef<Socket | null>(null);
-
+  const navigate = useNavigate();
+  
   useEffect(() => {
     if (socketRef) {
       socketRef.current = io(SOCKET_SERVER_URL);
       console.log("hello");
       socketRef.current.on("socketAndSee", (data) => console.log(data));
       socketRef.current.emit("thanks", "thanks! so much lol!");
+      // listen for roomCreate
+      // create QR code that points to /join?=
+      socketRef.current.on("roomCreated", (data) => {
+        setShowQRCodeModal(true);
+      });
+
+      socketRef.current.on("partnerJoining", () => {
+        setPartnerJoining(true);
+      });
+
+      socketRef.current.on("chatStarts", (data) => {
+        navigate({
+          to: `/chat`,
+          search: data.roomName,
+        });
+      });
     }
 
     return () => {
@@ -51,14 +87,19 @@ function MainApp() {
       partnerLanguage: formData.get("partnerLanguage") as langs,
     };
 
+    const roomName = socketRef.current?.id + "-room";
+
     socketRef.current?.emit("newRoom", {
-      roomData: retrievedData,
+      roomName: roomName,
+      roomMetadata: retrievedData,
       socketId: socketRef.current.id,
     });
+
+    setNewRoomName(roomName);
   };
 
   return (
-    <div className="min-w-[400px] p-2 bg-white max-w-[400px] min-h-[800px] max-h-[800px]">
+    <>
       <div>
         <h1 className="font-medium">BlaBlaBla</h1>
       </div>
@@ -71,6 +112,38 @@ function MainApp() {
         setPartnerLang={setPartnerLanguage}
         onSubmitForm={handleSubmitForm}
       />
+      {showQRCodeModal && (
+        <JoinRoomQRCodeModal>
+          {newRoomName && (
+            <div className="flex flex-col items-center justify-center gap-4">
+              {!partnerJoining ? (
+                <>
+                  <QRCodeSVG
+                    value={`${VITE_DEV_SERVER}/join?roomName=${newRoomName}`}
+                  />
+                  <Link to="/join" search={{ roomName: newRoomName }}>
+                    Room Link
+                  </Link>
+                </>
+              ) : (
+                <div className="size-32 bg-emerald-400 text-white text-center place-content-center">
+                  Partner is joining. PLS B PATIENT OKAY?
+                </div>
+              )}
+            </div>
+          )}
+        </JoinRoomQRCodeModal>
+      )}
+    </>
+  );
+}
+
+function JoinRoomQRCodeModal({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0 z-10 bg-black/20 p-4">
+      <div className="bg-white flex flex-col items-center justify-center">
+        {children}
+      </div>
     </div>
   );
 }

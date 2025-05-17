@@ -1,6 +1,6 @@
 # steps
 
-1. add tanstack router
+~~1. add tanstack router~~
 2. create a room with id on server when user submits initial form
 3. config room with logic to only allow 2 participants
 4. user A is one participant, should be added on room creation
